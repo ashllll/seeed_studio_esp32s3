@@ -20,9 +20,9 @@
 #define SCREEN_HEIGHT 64
 
 // 编码器
-#define ENCODER_PIN_A 3
-#define ENCODER_PIN_B 4
-#define ENCODER_BTN_PIN 7
+#define ENCODER_PIN_A 1
+#define ENCODER_PIN_B 2
+#define ENCODER_BTN_PIN 3
 #define ENCODER_STEPS_PER_NOTCH 4
 
 // PWM输出
