@@ -2,8 +2,7 @@
 #define UI_ADAPTER_H
 
 #include <Arduino.h>
-#include <Adafruit_SSD1306.h>
-#include <Adafruit_GFX.h>
+#include <U8g2lib.h>
 #include "config.h"
 #include "temp_sensor.h"
 #include "pid_controller.h"
@@ -17,7 +16,8 @@ enum UIPage {
     UI_PAGE_PID_MENU,        // PID参数菜单
     UI_PAGE_CALIBRATION,     // 校准菜单
     UI_PAGE_SYSTEM_INFO,     // 系统信息页面
-    UI_PAGE_ERROR            // 错误页面
+    UI_PAGE_ERROR,           // 错误页面
+    UI_PAGE_POPUP            // 弹出窗口页面
 };
 
 // 菜单项类型
@@ -25,7 +25,8 @@ enum MenuItemType {
     ITEM_NORMAL = 0,     // 普通菜单项
     ITEM_SWITCH,         // 开关菜单项
     ITEM_SLIDER,         // 滑块菜单项
-    ITEM_SUBMENU         // 子菜单项
+    ITEM_SUBMENU,        // 子菜单项
+    ITEM_USER            // 用户自定义项
 };
 
 // 菜单项定义
@@ -37,12 +38,15 @@ struct MenuItem {
     float minValue;          // 最小值（用于滑块）
     float maxValue;          // 最大值（用于滑块）
     float stepValue;         // 步长（用于滑块）
+    void (*initFunc)();      // 初始化函数（用于用户自定义项）
+    void (*loopFunc)();      // 循环函数（用于用户自定义项）
+    void (*exitFunc)();      // 退出函数（用于用户自定义项）
 };
 
 // UI适配器类
 class UIAdapter {
 private:
-    Adafruit_SSD1306* display;  // 显示屏指针
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C* display;  // 显示屏指针
     TempSensor* tempSensor;     // 温度传感器指针
     PIDController* pidController; // PID控制器指针
     PWMController* pwmController; // PWM控制器指针
@@ -64,6 +68,7 @@ private:
     float targetTemp;           // 目标温度
     uint8_t powerPercentage;    // 功率百分比
     SystemState systemState;    // 系统状态
+    bool inUserItem;            // 是否在用户自定义项中
     
     // 动画参数
     uint8_t animationFrame;     // 动画帧
@@ -85,6 +90,7 @@ private:
     void drawCalibrationPage();
     void drawSystemInfoPage();
     void drawErrorPage();
+    void drawPopup(const char* message, uint16_t duration);
     
     // 通用菜单绘制函数
     void drawMenu(MenuItem* items, uint8_t itemCount, const char* title);
@@ -93,12 +99,13 @@ private:
     void drawProgressBar(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t percentage);
     void drawAnimatedBar(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t percentage);
     void drawSelector(uint16_t y, uint16_t width);
+    void animatePosition(float* pos, float target, float speed);
     
     // 初始化菜单项
     void initMenuItems();
 
 public:
-    UIAdapter(Adafruit_SSD1306* _display, TempSensor* _tempSensor, 
+    UIAdapter(U8G2_SSD1306_128X64_NONAME_F_HW_I2C* _display, TempSensor* _tempSensor,
               PIDController* _pidController, PWMController* _pwmController,
               UserInput* _userInput);
     

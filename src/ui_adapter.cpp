@@ -1,6 +1,6 @@
 #include "ui_adapter.h"
 
-UIAdapter::UIAdapter(Adafruit_SSD1306* _display, TempSensor* _tempSensor, 
+UIAdapter::UIAdapter(U8G2_SSD1306_128X64_NONAME_F_HW_I2C* _display, TempSensor* _tempSensor,
                     PIDController* _pidController, PWMController* _pwmController,
                     UserInput* _userInput) {
     display = _display;
@@ -29,6 +29,7 @@ UIAdapter::UIAdapter(Adafruit_SSD1306* _display, TempSensor* _tempSensor,
     targetTemp = TEMP_DEFAULT;
     powerPercentage = 0;
     systemState = STATE_IDLE;
+    inUserItem = false;
     
     // 初始化菜单项计数
     mainMenuItemCount = 0;
@@ -63,7 +64,7 @@ void UIAdapter::update() {
     lastRefreshTime = now;
     
     // 清屏
-    display->clearDisplay();
+    display->clearBuffer();
     
     // 更新动画帧
     animationFrame = (animationFrame + 1) % 8;
@@ -91,7 +92,7 @@ void UIAdapter::update() {
     }
     
     // 显示
-    display->display();
+    display->sendBuffer();
 }
 
 void UIAdapter::handleInput() {
@@ -279,50 +280,33 @@ void UIAdapter::handleInput() {
 
 void UIAdapter::drawMainPage() {
     // 左侧：目标温度和功率百分比
-    display->setTextSize(1);
-    display->setCursor(0, 0);
-    display->print("[");
-    display->print((int)targetTemp);
-    display->print("] SET");
+    display->setFont(u8g2_font_ncenB08_tr);
+    display->drawStr(0, 10, ("[" + String((int)targetTemp) + "] SET").c_str());
     
     // 功率百分比和动画条
-    display->setCursor(0, 30);
-    display->print(powerPercentage);
-    display->print("% ");
-    drawAnimatedBar(20, 30, 40, 10, powerPercentage);
+    display->drawStr(0, 40, (String(powerPercentage) + "%").c_str());
+    drawAnimatedBar(20, 35, 40, 10, powerPercentage);
     
     // 右侧：当前温度 (大字号)
-    display->setTextSize(2);
-    display->setCursor(70, 15);
-    display->print((int)currentTemp);
-    display->setTextSize(1);
-    display->print("C");
+    display->setFont(u8g2_font_ncenB14_tr);
+    display->drawStr(70, 30, (String((int)currentTemp) + "C").c_str());
     
     // 系统状态
-    display->setTextSize(1);
-    display->setCursor(0, 54);
-    
+    display->setFont(u8g2_font_ncenB08_tr);
+    // 临时解决方案，之后需要实现 getSystemStateString()
+    String stateStr;
     switch (systemState) {
-        case STATE_IDLE:
-            display->print("IDLE");
-            break;
-        case STATE_WORKING:
-            display->print("HEATING");
-            break;
-        case STATE_CALIBRATION:
-            display->print("CALIBRATING");
-            break;
-        case STATE_MENU:
-            display->print("MENU");
-            break;
-        case STATE_ERROR:
-            display->print("ERROR!");
-            break;
+        case STATE_IDLE: stateStr = "IDLE"; break;
+        case STATE_WORKING: stateStr = "WORKING"; break;
+        case STATE_CALIBRATION: stateStr = "CALIBRATION"; break;
+        case STATE_MENU: stateStr = "MENU"; break;
+        case STATE_ERROR: stateStr = "ERROR"; break;
+        default: stateStr = "UNKNOWN";
     }
+    display->drawStr(0, 60, stateStr.c_str());
     
     // 操作提示
-    display->setCursor(70, 54);
-    display->print("Click:MENU");
+    display->drawStr(70, 60, "Click:MENU");
 }
 
 void UIAdapter::drawMainMenu() {
@@ -334,101 +318,85 @@ void UIAdapter::drawPIDMenu() {
 }
 
 void UIAdapter::drawCalibrationPage() {
-    display->setTextSize(1);
-    display->setCursor(0, 0);
-    display->println("TEMPERATURE CALIBRATION");
-    display->drawLine(0, 10, SCREEN_WIDTH, 10, SSD1306_WHITE);
+    // 卡片式布局 - 校准卡片
+    display->setDrawColor(1);
+    display->drawBox(5, 5, SCREEN_WIDTH - 10, SCREEN_HEIGHT - 10);
+    display->setDrawColor(0);
+    display->drawBox(7, 7, SCREEN_WIDTH - 14, SCREEN_HEIGHT - 14);
+    display->setDrawColor(1);
+    
+    // 卡片标题
+    display->setFont(u8g2_font_ncenB08_tr);
+    display->drawStr(10, 15, "Calibration");
     
     // 当前读数和校准目标
-    display->setCursor(0, 15);
-    display->print("Current: ");
-    display->print(currentTemp, 1);
-    display->println("C");
-    
-    display->setCursor(0, 25);
-    display->print("Set Real: ");
-    display->print(targetTemp, 1);
-    display->println("C");
+    display->drawStr(10, 30, ("Current: " + String(currentTemp, 1) + "C").c_str());
+    display->drawStr(10, 40, ("Set Real: " + String(targetTemp, 1) + "C").c_str());
     
     // 偏差
     float offset = targetTemp - currentTemp;
-    display->setCursor(0, 35);
-    display->print("Offset: ");
-    display->print(offset, 1);
-    display->println("C");
+    display->drawStr(10, 50, ("Offset: " + String(offset, 1) + "C").c_str());
     
     // 操作提示
-    display->setCursor(0, 55);
-    display->println("Rotate:Adjust  Click:Save");
+    display->drawStr(10, 60, "Rotate:Adjust Click:Save");
 }
 
 void UIAdapter::drawSystemInfoPage() {
-    display->setTextSize(1);
-    display->setCursor(0, 0);
-    display->println("SYSTEM INFORMATION");
-    display->drawLine(0, 10, SCREEN_WIDTH, 10, SSD1306_WHITE);
+    // 卡片式布局 - 系统信息卡片
+    display->setDrawColor(1);
+    display->drawBox(5, 5, SCREEN_WIDTH - 10, SCREEN_HEIGHT - 10);
+    display->setDrawColor(0);
+    display->drawBox(7, 7, SCREEN_WIDTH - 14, SCREEN_HEIGHT - 14);
+    display->setDrawColor(1);
+    
+    // 卡片标题
+    display->setFont(u8g2_font_ncenB08_tr);
+    display->drawStr(10, 15, "System Info");
     
     // 版本信息
-    display->setCursor(0, 15);
-    display->print("Version: ");
-    display->println(SYSTEM_VERSION);
+    display->drawStr(10, 30, ("Version: " + String(SYSTEM_VERSION)).c_str());
     
     // 系统运行时间
     unsigned long runTime = millis() / 1000; // 秒
-    display->setCursor(0, 25);
-    display->print("Uptime: ");
-    display->print(runTime / 3600); // 小时
-    display->print("h ");
-    display->print((runTime % 3600) / 60); // 分钟
-    display->print("m ");
-    display->print(runTime % 60); // 秒
-    display->println("s");
+    display->drawStr(10, 40, ("Uptime: " + String(runTime / 3600) + "h " + String((runTime % 3600) / 60) + "m").c_str());
     
     // PID参数
     double kp, ki, kd;
     pidController->getTunings(&kp, &ki, &kd);
-    display->setCursor(0, 35);
-    display->print("PID: ");
-    display->print(kp, 1);
-    display->print("/");
-    display->print(ki, 1);
-    display->print("/");
-    display->print(kd, 1);
+    display->drawStr(10, 50, ("PID: " + String(kp, 1) + "/" + String(ki, 1) + "/" + String(kd, 1)).c_str());
     
     // 操作提示
-    display->setCursor(0, 55);
-    display->println("Click: Return");
+    display->drawStr(10, 60, "Click: Return");
 }
 
 void UIAdapter::drawErrorPage() {
-    display->setTextSize(1);
-    display->setCursor(0, 0);
-    display->println("ERROR DETECTED!");
-    display->drawLine(0, 10, SCREEN_WIDTH, 10, SSD1306_WHITE);
+    // 卡片式布局 - 错误卡片
+    display->setDrawColor(1);
+    display->drawBox(5, 5, SCREEN_WIDTH - 10, SCREEN_HEIGHT - 10);
+    display->setDrawColor(0);
+    display->drawBox(7, 7, SCREEN_WIDTH - 14, SCREEN_HEIGHT - 14);
+    display->setDrawColor(1);
+    
+    // 卡片标题
+    display->setFont(u8g2_font_ncenB08_tr);
+    display->drawStr(10, 15, "Error Detected!");
     
     // 错误代码和消息
-    display->setCursor(0, 15);
-    display->print("Code: E");
-    display->println(errorCode);
-    
-    display->setCursor(0, 25);
-    display->println(errorMessage);
+    display->drawStr(10, 30, ("Code: E" + String(errorCode)).c_str());
+    display->drawStr(10, 40, errorMessage);
     
     // 安全状态提示
-    display->setCursor(0, 45);
-    display->println("Heater: DISABLED");
+    display->drawStr(10, 50, "Heater: DISABLED");
     
     // 操作提示
-    display->setCursor(0, 55);
-    display->println("Long press to reset");
+    display->drawStr(10, 60, "Long press: Reset");
 }
 
 void UIAdapter::drawMenu(MenuItem* items, uint8_t itemCount, const char* title) {
     // 标题
-    display->setTextSize(1);
-    display->setCursor(0, 0);
-    display->println(title);
-    display->drawLine(0, 10, SCREEN_WIDTH, 10, SSD1306_WHITE);
+    display->setFont(u8g2_font_ncenB08_tr);
+    display->drawStr(0, 10, title);
+    display->drawHLine(0, 12, SCREEN_WIDTH);
     
     // 确定显示的菜单项范围 (最多显示4项)
     int startIdx = 0;
@@ -445,13 +413,13 @@ void UIAdapter::drawMenu(MenuItem* items, uint8_t itemCount, const char* title) 
     // 绘制菜单项
     for (int i = 0; i < 4 && i + startIdx < itemCount; i++) {
         int idx = i + startIdx;
-        int y = 15 + i * 10;
+        int y = 25 + i * 10;
         
         // 绘制选择器
         if (idx == menuSelection) {
             if (valueEditing) {
                 // 编辑模式下使用不同样式
-                display->fillRect(0, y - 1, 3, 9, SSD1306_WHITE);
+                display->drawBox(0, y - 1, 3, 9);
             } else {
                 // 选中项
                 drawSelector(y, 120);
@@ -459,31 +427,27 @@ void UIAdapter::drawMenu(MenuItem* items, uint8_t itemCount, const char* title) 
         }
         
         // 绘制菜单项文本
-        display->setCursor(5, y);
-        display->print(items[idx].title);
+        display->drawStr(5, y, items[idx].title);
         
         // 根据类型绘制额外内容
         switch (items[idx].type) {
             case ITEM_SWITCH:
                 // 开关项
                 if (items[idx].valuePtr != nullptr) {
-                    display->setCursor(100, y);
-                    display->print(*items[idx].valuePtr > 0 ? "ON" : "OFF");
+                    display->drawStr(100, y, *items[idx].valuePtr > 0 ? "ON" : "OFF");
                 }
                 break;
                 
             case ITEM_SLIDER:
                 // 滑块项
                 if (items[idx].valuePtr != nullptr) {
-                    display->setCursor(100, y);
-                    display->print(*items[idx].valuePtr, 1);
+                    display->drawStr(100, y, String(*items[idx].valuePtr, 1).c_str());
                 }
                 break;
                 
             case ITEM_SUBMENU:
                 // 子菜单项
-                display->setCursor(110, y);
-                display->print(">");
+                display->drawStr(110, y, ">");
                 break;
                 
             default:
@@ -492,12 +456,7 @@ void UIAdapter::drawMenu(MenuItem* items, uint8_t itemCount, const char* title) 
     }
     
     // 操作提示
-    display->setCursor(0, 55);
-    if (valueEditing) {
-        display->println("Rotate:Adjust Click:Save");
-    } else {
-        display->println("Rotate:Move Click:Select");
-    }
+    display->drawStr(0, 60, valueEditing ? "Rotate:Adjust Click:Save" : "Rotate:Move Click:Select");
 }
 
 void UIAdapter::drawProgressBar(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t percentage) {
@@ -507,14 +466,14 @@ void UIAdapter::drawProgressBar(uint16_t x, uint16_t y, uint16_t width, uint16_t
     }
     
     // 绘制外框
-    display->drawRect(x, y, width, height, SSD1306_WHITE);
+    display->drawFrame(x, y, width, height);
     
     // 计算填充宽度
     uint16_t fillWidth = (percentage * (width - 2)) / 100;
     
     // 填充进度条
     if (fillWidth > 0) {
-        display->fillRect(x + 1, y + 1, fillWidth, height - 2, SSD1306_WHITE);
+        display->drawBox(x + 1, y + 1, fillWidth, height - 2);
     }
 }
 
@@ -530,17 +489,17 @@ void UIAdapter::drawAnimatedBar(uint16_t x, uint16_t y, uint16_t width, uint16_t
         
         // 绘制动画点
         if (fillWidth > 2) {
-            display->drawPixel(x + 1 + animPos, y + height/2, !SSD1306_WHITE);
+            display->drawPixel(x + 1 + animPos, y + height/2);
         }
     }
 }
 
 void UIAdapter::drawSelector(uint16_t y, uint16_t width) {
     // 绘制选择器框
-    display->drawRect(0, y - 2, width, 11, SSD1306_WHITE);
+    display->drawFrame(0, y - 2, width, 11);
     
     // 左侧填充
-    display->fillRect(0, y - 1, 3, 9, SSD1306_WHITE);
+    display->drawBox(0, y - 1, 3, 9);
 }
 
 void UIAdapter::initMenuItems() {
@@ -686,4 +645,30 @@ void UIAdapter::clearError() {
 
 float UIAdapter::getTargetTemp() {
     return targetTemp;
-} 
+}
+
+void UIAdapter::drawPopup(const char* message, uint16_t duration) {
+    // 绘制弹出窗口背景
+    display->setDrawColor(1);
+    display->drawBox(10, 20, SCREEN_WIDTH - 20, SCREEN_HEIGHT - 40);
+    display->setDrawColor(0);
+    display->drawBox(12, 22, SCREEN_WIDTH - 24, SCREEN_HEIGHT - 44);
+    display->setDrawColor(1);
+    
+    // 绘制消息
+    display->setFont(u8g2_font_ncenB08_tr);
+    display->drawStr(15, 35, message);
+    
+    // 绘制关闭提示
+    display->drawStr(15, 50, "Click to close");
+}
+
+void UIAdapter::animatePosition(float* pos, float target, float speed) {
+    if (*pos != target) {
+        if (fabs(*pos - target) <= 1.0f) {
+            *pos = target;
+        } else {
+            *pos += (target - *pos) / (100.0f - speed) / 1.0f;
+        }
+    }
+}
